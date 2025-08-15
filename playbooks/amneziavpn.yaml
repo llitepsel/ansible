@@ -1,0 +1,57 @@
+---
+- name: Install amnezia vpn
+  hosts: server
+  become: yes
+  vars:
+    packages_to_install:
+      - resolvconf
+      - amneziawg
+
+  tasks:
+    - name: Add repository
+      ansible.builtin.apt_repository:
+        repo: ppa:amnezia/ppa
+        update_cache: true
+
+    - name: Enable repose
+      ansible.builtin.replace:
+        path: /etc/apt/sources.list
+        regexp: '# deb-src'
+        replace: 'deb-src'
+
+    - name: fix for src ubuntu
+      ansible.builtin.replace:
+        path: /etc/apt/sources.list.d/ubuntu.sources
+        regexp: 'Types: deb$'
+        replace: 'Types: deb deb-src'
+
+    - name: Update and upgrade apt packages
+      ansible.builtin.apt:
+        upgrade: yes
+        update_cache: yes
+
+    - name: Install common packages
+      ansible.builtin.apt:
+        name: "{{ packages_to_install }}"
+        state: present
+
+    - name: enable port-forward
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: true
+        state: present
+        reload: true
+
+    - name: modprobe amnezia
+      community.general.modprobe:
+        name: amneziawg
+        state: present
+        persistent: present
+#sudo mv /etc/amnezia/amneziawg/wg-client1.conf /etc/amnezia/amneziawg/wg0.conf
+#sudo chmod 600 /etc/amnezia/amneziawg/wg0.conf
+#    - name: Enable awg service
+#      ansible.builtin.systemd_service:
+#        name: awg-quick@wg0
+#        enabled: true
+#        state: started
