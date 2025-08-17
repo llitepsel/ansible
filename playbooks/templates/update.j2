@@ -1,0 +1,6 @@
+GET_IP="$(curl ifconfig.me -s | awk '{print $1}')"
+CURRENT_IP="$(cat result_ip)"
+if [ $GET_IP != $CURRENT_IP ]
+then
+  curl --request PUT   --url https://api.cloudflare.com/client/v4/zones/{{ zone }}/dns_records/{{ zone_record }}   --header 'Content-Type: application/json'   --header 'Authorization: Bearer {{ dns_cloudflare_api_token }}'   --data '{  "comment": "Domain verification record",  "name": "vladdoilzhirafa.work",  "proxied": false,  "settings": {},  "tags": [],  "ttl": 3600,  "content": "'"$GET_IP"'",  "type": "A"}' && echo $GET_IP > result_ip
+fi

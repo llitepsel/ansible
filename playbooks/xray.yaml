@@ -1,0 +1,94 @@
+---
+- name: Install xray
+  hosts: server
+  become: yes
+  vars:
+    packages_to_install:
+      - nginx
+      - python3-certbot-dns-cloudflare
+      - python3-pip
+      - fail2ban
+    services:
+      - awg-quick@wg0
+      - nginx
+      - fail2ban
+      - xray
+  tasks:
+    - name: Copy xray script to remote host
+      ansible.builtin.copy:
+        src: "install-release.sh"
+        dest: "/tmp/install-release.sh"
+        mode: "0755"
+
+    - name: Update and upgrade apt packages
+      ansible.builtin.apt:
+        upgrade: yes
+        update_cache: yes
+
+    - name: Install common packages
+      ansible.builtin.apt:
+        name: "{{ packages_to_install }}"
+        state: present
+
+    - name: Run installation script
+      ansible.builtin.shell:
+        cmd: bash -c "/tmp/install-release.sh"  @ install
+
+    - name: Copy cloudflare ini file
+      ansible.builtin.template:
+        src: "cloudflare.j2"
+        dest: "./cloudflare.ini"
+        mode: "0755"
+
+    - name: Copy nginx config file
+      ansible.builtin.template:
+        src: "nginx.j2"
+        dest: "/etc/nginx/sites-available/default"
+        mode: "0755"
+
+    - name: Copy fail2bot configs
+      ansible.builtin.copy:
+        src: "nginx-custom-spam.conf"
+        dest: "/etc/fail2ban/filter.d/nginx-custom-spam.conf"
+        mode: "0755"
+
+    - name: Copy fail2bot configs-2
+      ansible.builtin.copy:
+        src: nginxbot.conf
+        dest: /etc/fail2ban/jail.d/nginxbot.conf
+        mode: "0755"
+
+    - name: Copy update.sh file
+      ansible.builtin.template:
+        src: "update.j2"
+        dest: "./update.sh"
+        mode: "0755"
+
+    - name: Touch a file
+      ansible.builtin.file:
+        path: result_ip
+        state: touch
+        mode: u=rw,g=rw,o=rw
+
+    - name: Add cron job
+      become: false
+      ansible.builtin.cron:
+        name: "check_ip"
+        minute: "*/25"
+        job: "/home/an/update.sh"
+
+    - name: Copy an encrypted config
+      ansible.builtin.copy:
+        content: "{{ xray_conf }}"
+        dest: /usr/local/etc/xray/config.json
+
+    - name: Run certbot
+      ansible.builtin.shell:
+        cmd: certbot certonly --non-interactive --agree-tos --register-unsafely-without-email  --dns-cloudflare --dns-cloudflare-credentials ./cloudflare.ini -d {{ dns_name }}
+
+    - name: Enable services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop: "{{ service }}"
