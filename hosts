@@ -1,2 +1,4 @@
 [server]
-192.168.1.151 ansible_user=an 
+192.168.1.17 ansible_user=an
+[dell]
+10.10.8.4 ansible_user=an

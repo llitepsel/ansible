@@ -1,0 +1,12 @@
+[Unit]
+Description=node_exporter- Node exporter
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/node_exporter/bin/node_exporter-{{ vm_version }}.linux-{{ vm_arch }}/node_exporter
+
+[Install]
+WantedBy=multi-user.target

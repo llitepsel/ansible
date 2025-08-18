@@ -1,0 +1,41 @@
+---
+- name: Install vicrotia_metrics
+  hosts: server
+  become: yes
+  vars:
+    vm_version: "1.95.1"
+    vm_arch: "amd64"
+  tasks:
+  - name: Create VictoriaMetrics directories
+    file:
+      path: "/opt/victoriametrics/{{ item }}"
+      state: directory
+      owner: root
+      group: root
+    loop:
+      - bin
+      - data
+  
+  - name: Download VictoriaMetrics
+    get_url:
+      url: "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v{{ vm_version }}/victoria-metrics-linux-{{ vm_arch }}-v{{ vm_version }}.tar.gz"
+      dest: "/opt/victoriametrics/bin/victoria-metrics.tar.gz"
+      mode: "0755"
+  
+  - name: Extract VictoriaMetrics
+    ansible.builtin.unarchive:
+      src: "/opt/victoriametrics/bin/victoria-metrics.tar.gz"
+      dest: "/opt/victoriametrics/bin/"
+      remote_src: yes
+#      extra_opts: ["--strip-components=1"]
+  
+  - name: Install VictoriaMetrics systemd service
+    template:
+      src: "victoriametrics.service.j2"
+      dest: "/etc/systemd/system/victoria-metrics.service"
+  
+  - name: Enable and start VictoriaMetrics
+    ansible.builtin.systemd_service:
+      name: "victoria-metrics"
+      enabled: true
+      state: started

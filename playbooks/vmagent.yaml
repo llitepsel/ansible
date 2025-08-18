@@ -1,0 +1,42 @@
+---
+- name: Install vmagent
+  hosts: server
+  become: yes
+  vars:
+    vm_version: "1.95.1"
+    vm_arch: "amd64"
+  tasks:
+  - name: Create vmagent directories
+    file:
+      path: "/opt/vmagent/{{ item }}"
+      state: directory
+    loop:
+      - bin
+      - config
+  
+  - name: Download vmagent
+    get_url:
+      url: "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v{{ vm_version }}/vmutils-linux-{{ vm_arch }}-v{{ vm_version }}.tar.gz"
+      dest: "/opt/vmagent/bin/vmagent.tar.gz"
+  
+  - name: Extract vmagent
+    unarchive:
+      src: "/opt/vmagent/bin/vmagent.tar.gz"
+      dest: "/opt/vmagent/bin/"
+      remote_src: yes
+  
+  - name: Deploy vmagent config
+    template:
+      src: "config.yml.j2"
+      dest: "/opt/vmagent/config/config.yml"
+  
+  - name: Install vmagent systemd service
+    template:
+      src: "vmagent.service.j2"
+      dest: "/etc/systemd/system/vmagent.service"
+
+  - name: Enable and start vmagent
+    ansible.builtin.systemd_service:
+      name: "vmagent"
+      enabled: true
+      state: started

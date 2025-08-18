@@ -1,0 +1,17 @@
+[Unit]
+Description=vmagent - VictoriaMetrics metrics collector
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/vmagent/bin/vmagent-prod \
+  -promscrape.config=/opt/vmagent/config/config.yml \
+  -remoteWrite.url=http://localhost:8428/api/v1/write
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
