@@ -1,6 +1,6 @@
 ---
 - name: Install vmagent
-  hosts: server
+  hosts: all
   become: yes
   tasks:
   - name: Install dependencies (HTTPS support for APT)

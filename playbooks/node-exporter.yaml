@@ -1,6 +1,6 @@
 ---
 - name: Install node exporter
-  hosts: dell
+  hosts: all
   become: yes
   vars:
     vm_version: "1.9.1"

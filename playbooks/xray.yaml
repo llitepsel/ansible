@@ -1,6 +1,6 @@
 ---
 - name: Install xray
-  hosts: server
+  hosts: all
   become: yes
   vars:
     packages_to_install:

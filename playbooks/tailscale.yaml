@@ -1,0 +1,154 @@
+- name: Install and configure Headscale with Nginx
+  hosts: all
+  become: true
+
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+
+    - name: Install dependencies
+      apt:
+        name:
+          - python3-certbot-dns-cloudflare
+          - python3-pip
+          - curl
+          - wget
+          - unzip
+          - jq
+          - nginx
+        state: present
+
+    - name: Download Headscale binary
+      shell: |
+        HEADSCALE_VERSION=$(curl -s https://api.github.com/repos/juanfont/headscale/releases/latest | jq -r '.tag_name')
+        wget https://github.com/juanfont/headscale/releases/download/${HEADSCALE_VERSION}/headscale_${HEADSCALE_VERSION#v}_linux_amd64 -O /usr/local/bin/headscale
+        chmod +x /usr/local/bin/headscale
+      args:
+        creates: /usr/local/bin/headscale
+
+    - name: Create directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/headscale
+        - /var/lib/headscale
+
+    - name: Create config.yaml
+      copy:
+        dest: /etc/headscale/config.yaml
+        content: |
+          server_url: "https://dns_name_headscale:{{ headscale_port }}"
+          listen_addr: "127.0.0.1:{{ headscale_port }}"
+          metrics_listen_addr: "127.0.0.1:9090"
+          grpc_listen_addr: "127.0.0.1:50443"
+          grpc_allow_insecure: false
+          private_key_path: "/var/lib/headscale/private.key"
+          dns:
+            magic_dns: false
+            nameservers:
+              global:
+              - 8.8.8.8
+          noise:
+            private_key_path: "/var/lib/headscale/noise_private.key"
+          prefixes:
+            v4: 100.64.0.0/10
+            allocation: sequential
+          database:
+            type: sqlite
+            sqlite:
+              path: /var/lib/headscale/db.sqlite
+          derp:
+            server:
+              enabled: false
+              region_id: 999
+              region_code: "headscale"
+              region_name: "Headscale Embedded DERP"
+              stun_listen_addr: "0.0.0.0:3478"
+            urls:
+              - https://controlplane.tailscale.com/derpmap/default
+            paths: []
+            auto_update_enabled: true
+            update_frequency: 24h
+          log:
+            level: info
+            format: text
+
+    - name: Create nginx.conf
+      copy:
+        dest: /etc/nginx/sites-available/headscale
+        content: |
+          server {
+              listen 8443 ssl http2;
+              server_name headscale.{{ dns_name }};
+          
+              ssl_certificate /etc/letsencrypt/live/headscale.{{ dns_name }}/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/headscale.{{ dns_name }}/privkey.pem;
+          
+              location / {
+                  proxy_pass http://127.0.0.1:{{ headscale_port }};
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection $connection_upgrade;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_read_timeout 86400s;
+              }
+          }
+
+    - name: Generate private key
+      shell: headscale generate private-key --output /var/lib/headscale/private.key
+      args:
+        creates: /var/lib/headscale/private.key
+
+    - name: Generate noise key
+      shell: headscale generate noise --output /var/lib/headscale/noise_private.key
+      args:
+        creates: /var/lib/headscale/noise_private.key
+
+    - name: Create systemd unit
+      copy:
+        dest: /etc/systemd/system/headscale.service
+        content: |
+          [Unit]
+          Description=Headscale Coordination Server
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/local/bin/headscale serve
+          WorkingDirectory=/etc/headscale
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload and enable Headscale
+      systemd:
+        name: headscale
+        daemon_reload: yes
+        enabled: yes
+        state: started
+
+    - name: Run certbot
+       ansible.builtin.shell:
+         cmd: certbot certonly --non-interactive --agree-tos --register-unsafely-without-email  --dns-cloudflare --dns-cloudflare-credentials ./cloudflare.ini -d headscale.{{ dns_name }}
+
+    - name: Enable Nginx site
+      file:
+        src: /etc/nginx/sites-available/headscale
+        dest: /etc/nginx/sites-enabled/headscale
+        state: link
+        force: true
+      notify: Reload Nginx
+
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: restarted
+

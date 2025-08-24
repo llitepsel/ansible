@@ -1,6 +1,6 @@
 ---
 - name: Install vmagent
-  hosts: server
+  hosts: all
   become: yes
   vars:
     vm_version: "1.95.1"

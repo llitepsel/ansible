@@ -1,6 +1,6 @@
 ---
 - name: Install blackbox
-  hosts: server
+  hosts: all
   become: yes
   vars:
     vm_version: "0.26.0"
